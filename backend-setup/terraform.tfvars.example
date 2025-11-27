@@ -1,0 +1,13 @@
+# AWS Configuration
+aws_region = "us-west-2"
+
+# Project Configuration
+project_name = "cde-infra"
+environment  = "prod"
+
+# Tags
+tags = {
+  Project     = "CDE Infrastructure"
+  ManagedBy   = "Terraform"
+  Environment = "prod"
+}

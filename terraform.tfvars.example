@@ -1,0 +1,42 @@
+# AWS Configuration
+aws_region = "us-west-2"
+
+# Environment Configuration
+environment  = "dev"
+project_name = "cde"
+
+# EKS Cluster Configuration
+cluster_name    = "cde-eks-cluster"
+cluster_version = "1.28"
+
+# VPC Configuration
+vpc_cidr        = "10.0.0.0/16"
+azs             = ["us-west-2a", "us-west-2b", "us-west-2c"]
+private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
+
+# DNS Configuration (for External DNS)
+domain_name     = "example.com"
+route53_zone_id = "Z1234567890ABC"
+
+# MongoDB Configuration
+mongodb_storage_size          = "20Gi"
+mongodb_replicas              = 3
+mongodb_version               = "7.0.5"
+mongodb_backup_schedule       = "0 2 * * *"  # Daily at 2 AM UTC
+mongodb_backup_retention_days = 30
+
+# Feature Flags
+enable_karpenter                    = true
+enable_aws_load_balancer_controller = true
+enable_cert_manager                 = true
+enable_external_dns                 = true
+enable_gateway_api                  = true
+enable_mongodb                      = true
+
+# Tags
+tags = {
+  Environment = "dev"
+  Project     = "cde"
+  ManagedBy   = "Terraform"
+}

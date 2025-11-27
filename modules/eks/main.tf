@@ -251,7 +251,7 @@ resource "aws_eks_node_group" "system" {
   }
 
   # Ensure CoreDNS and Karpenter run on these nodes
-  taints {
+  taint {
     key    = "CriticalAddonsOnly"
     value  = "true"
     effect = "NO_SCHEDULE"

@@ -1,5 +1,5 @@
 # AWS Configuration
-aws_region = "us-west-2"
+aws_region = "eu-west-1"
 
 # Project Configuration
 project_name = "cde-infra"

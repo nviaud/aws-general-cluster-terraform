@@ -1,0 +1,46 @@
+version: "3.8"
+
+services:
+  localstack:
+    container_name: cde-localstack
+    image: localstack/localstack:latest
+    ports:
+      - "127.0.0.1:4566:4566"            # LocalStack Gateway
+      - "127.0.0.1:4510-4559:4510-4559"  # External services port range
+    environment:
+      # LocalStack configuration
+      - DEBUG=${DEBUG-0}
+      - SERVICES=s3,ec2,iam,sts,cloudformation,dynamodb,route53,eks,ecr
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - LOCALSTACK_HOST=localhost.localstack.cloud:4566
+
+      # Persistence
+      - PERSISTENCE=${PERSISTENCE-1}
+
+      # AWS configuration
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+
+      # Additional settings
+      - DISABLE_CORS_CHECKS=1
+      - EAGER_SERVICE_LOADING=1
+
+    volumes:
+      - "${LOCALSTACK_VOLUME_DIR:-./.localstack}:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    networks:
+      - cde-local-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  cde-local-network:
+    driver: bridge
+
+volumes:
+  localstack-data:

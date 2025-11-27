@@ -40,11 +40,19 @@ The infrastructure includes:
 
 ## Prerequisites
 
+### For AWS Deployments (dev/staging/prod)
+
 1. **AWS CLI** configured with appropriate credentials
 2. **Terraform** >= 1.5
 3. **kubectl** for Kubernetes cluster access
 4. **Helm** (optional, for manual chart management)
 5. **Route53 Hosted Zone** for your domain (for External DNS)
+
+### For Local Development (LocalStack)
+
+1. **Docker** and **Docker Compose**
+2. **Terraform** >= 1.5
+3. See [LOCALSTACK.md](LOCALSTACK.md) for complete local setup
 
 ## Quick Start
 
@@ -129,6 +137,186 @@ kubectl get gateway -n envoy-gateway-system
 
 # Check MongoDB
 kubectl get pods -n mongodb
+```
+
+## Environment Management
+
+This project supports multiple environments (dev, staging, prod) with separate state files and configurations.
+
+### Environment Structure
+
+```
+environments/
+├── dev.tfvars              # Development configuration
+├── staging.tfvars          # Staging configuration
+├── prod.tfvars             # Production configuration
+├── backend-dev.hcl         # Dev backend config
+├── backend-staging.hcl     # Staging backend config
+└── backend-prod.hcl        # Production backend config
+```
+
+### Environment-Specific Settings
+
+Each environment has different configurations:
+
+**Local (LocalStack)**:
+- No AWS costs - runs locally in Docker
+- Minimal resource sizes
+- Limited service support (VPC, S3, IAM basics)
+- EKS/Kubernetes features disabled (requires LocalStack Pro)
+- CIDR: 10.99.0.0/16
+- See [LOCALSTACK.md](LOCALSTACK.md) for detailed setup
+
+**Development (dev)**:
+- Smaller resource sizes (10Gi MongoDB storage, 1 replica)
+- Shorter backup retention (7 days)
+- All features enabled for testing
+- CIDR: 10.0.0.0/16
+- Region: eu-west-1
+- Domain: dev.example.com
+
+**Staging (staging)**:
+- Medium resource sizes (30Gi MongoDB storage, 2 replicas)
+- Medium backup retention (14 days)
+- Production-like configuration
+- CIDR: 10.1.0.0/16
+- Region: eu-west-1
+- Domain: staging.example.com
+
+**Production (prod)**:
+- Large resource sizes (100Gi MongoDB storage, 3 replicas)
+- Extended backup retention (90 days)
+- High availability configuration
+- CIDR: 10.2.0.0/16
+- Region: eu-west-1
+- Domain: example.com
+
+### Using the Makefile
+
+The project includes a Makefile for easy environment management:
+
+```bash
+# Show available commands
+make help
+
+# Initialize a specific environment
+make init ENV=dev
+make init ENV=staging
+make init ENV=prod
+
+# Plan changes for an environment
+make plan ENV=dev
+
+# Apply changes (includes confirmation for prod)
+make apply ENV=staging
+
+# View outputs
+make output ENV=prod
+
+# Destroy an environment (requires confirmation)
+make destroy ENV=dev
+
+# Shortcuts for specific environments
+make dev-plan
+make staging-apply
+make prod-init
+
+# Get kubeconfig for an environment
+make kubeconfig-dev
+make kubeconfig-staging
+make kubeconfig-prod
+
+# LocalStack (local development without AWS costs)
+make local-setup        # Start LocalStack and setup environment
+make local-init         # Initialize Terraform for local env
+make local-plan         # Plan changes locally
+make local-apply        # Apply changes to LocalStack
+make local-clean        # Complete cleanup of local environment
+```
+
+For detailed LocalStack usage, see [LOCALSTACK.md](LOCALSTACK.md).
+
+### Manual Environment Management
+
+If you prefer not to use the Makefile:
+
+**Initialize with environment-specific backend:**
+
+```bash
+terraform init -backend-config=environments/backend-dev.hcl -reconfigure
+```
+
+**Plan with environment-specific variables:**
+
+```bash
+terraform plan -var-file=environments/dev.tfvars
+```
+
+**Apply with environment-specific variables:**
+
+```bash
+terraform apply -var-file=environments/staging.tfvars
+```
+
+### First-Time Setup
+
+1. **Set up the backend infrastructure** (S3 bucket and DynamoDB table):
+
+```bash
+make setup-backend
+# or manually:
+cd backend-setup
+terraform init
+terraform apply
+cd ..
+```
+
+2. **Customize environment configurations**:
+
+Edit `environments/dev.tfvars`, `environments/staging.tfvars`, and `environments/prod.tfvars` with your specific values:
+- AWS region
+- Domain names and Route53 zone IDs
+- Resource sizing
+- Feature flags
+
+3. **Initialize and deploy each environment**:
+
+```bash
+# Development
+make dev-init
+make dev-plan
+make dev-apply
+
+# Staging
+make staging-init
+make staging-plan
+make staging-apply
+
+# Production
+make prod-init
+make prod-plan
+make prod-apply
+```
+
+### Best Practices
+
+1. **State Isolation**: Each environment has its own state file in S3 to prevent accidental changes
+2. **Non-overlapping CIDRs**: Each environment uses different VPC CIDR blocks (10.0.0.0/16, 10.1.0.0/16, 10.2.0.0/16)
+3. **Resource Naming**: Resources are named with environment prefix (e.g., cde-dev-eks, cde-prod-eks)
+4. **Progressive Deployment**: Always test changes in dev → staging → prod
+5. **Production Protection**: The Makefile includes additional confirmation prompts for production changes
+6. **Separate AWS Accounts** (recommended): Consider using separate AWS accounts for production
+
+### Switching Between Environments
+
+To work with a different environment:
+
+```bash
+# Re-initialize with the target environment's backend
+make init ENV=staging
+
+# Now all terraform commands will use staging's state
+terraform plan -var-file=environments/staging.tfvars
 ```
 
 ## Key Features

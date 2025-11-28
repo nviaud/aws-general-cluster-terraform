@@ -176,78 +176,15 @@ resource "kubernetes_config_map" "mongodb_backup_script" {
 
 # CronJob for MongoDB Backups
 resource "kubernetes_manifest" "mongodb_backup_cronjob" {
-  manifest = {
-    apiVersion = "batch/v1"
-    kind       = "CronJob"
-    metadata = {
-      name      = "mongodb-backup"
-      namespace = kubernetes_namespace.mongodb.metadata[0].name
-    }
-    spec = {
-      schedule                   = var.backup_schedule
-      successfulJobsHistoryLimit = 3
-      failedJobsHistoryLimit     = 3
-      jobTemplate = {
-        spec = {
-          template = {
-            spec = {
-              serviceAccountName = kubernetes_service_account.mongodb_backup.metadata[0].name
-              restartPolicy      = "OnFailure"
-              containers = [
-                {
-                  name  = "mongodb-backup"
-                  image = "mongo:${var.mongodb_version}"
-                  command = ["/bin/bash", "/scripts/backup.sh"]
-                  env = [
-                    {
-                      name  = "AWS_REGION"
-                      value = data.aws_region.current.name
-                    }
-                  ]
-                  volumeMounts = [
-                    {
-                      name      = "backup-script"
-                      mountPath = "/scripts"
-                    },
-                    {
-                      name      = "mongodb-secret"
-                      mountPath = "/mongodb-secret"
-                      readOnly  = true
-                    }
-                  ]
-                  resources = {
-                    limits = {
-                      cpu    = "500m"
-                      memory = "1Gi"
-                    }
-                    requests = {
-                      cpu    = "250m"
-                      memory = "512Mi"
-                    }
-                  }
-                }
-              ]
-              volumes = [
-                {
-                  name = "backup-script"
-                  configMap = {
-                    name        = kubernetes_config_map.mongodb_backup_script.metadata[0].name
-                    defaultMode = 0755
-                  }
-                },
-                {
-                  name = "mongodb-secret"
-                  secret = {
-                    secretName = kubernetes_secret.mongodb_admin_user.metadata[0].name
-                  }
-                }
-              ]
-            }
-          }
-        }
-      }
-    }
-  }
+  manifest = yamldecode(templatefile("${path.module}/manifests/backup-cronjob.yaml", {
+    namespace            = kubernetes_namespace.mongodb.metadata[0].name
+    backup_schedule      = var.backup_schedule
+    service_account_name = kubernetes_service_account.mongodb_backup.metadata[0].name
+    mongodb_version      = var.mongodb_version
+    aws_region           = data.aws_region.current.name
+    configmap_name       = kubernetes_config_map.mongodb_backup_script.metadata[0].name
+    secret_name          = kubernetes_secret.mongodb_admin_user.metadata[0].name
+  }))
 
   depends_on = [
     kubernetes_manifest.mongodb_replicaset,

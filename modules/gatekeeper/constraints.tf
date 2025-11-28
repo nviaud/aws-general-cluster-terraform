@@ -5,26 +5,10 @@
 resource "kubernetes_manifest" "required_labels" {
   count = var.enable_required_labels && length(var.required_labels) > 0 ? 1 : 0
 
-  manifest = {
-    apiVersion = "constraints.gatekeeper.sh/v1beta1"
-    kind       = "K8sRequiredLabels"
-    metadata = {
-      name = "required-labels"
-    }
-    spec = {
-      match = {
-        kinds = [
-          { apiGroups = [""], kinds = ["Namespace"] },
-          { apiGroups = [""], kinds = ["Pod"] },
-          { apiGroups = ["apps"], kinds = ["Deployment", "StatefulSet", "DaemonSet"] },
-        ]
-        excludedNamespaces = var.excluded_namespaces
-      }
-      parameters = {
-        labels = var.required_labels
-      }
-    }
-  }
+  manifest = yamldecode(templatefile("${path.module}/manifests/constraint-required-labels.yaml", {
+    excluded_namespaces = var.excluded_namespaces
+    required_labels     = var.required_labels
+  }))
 
   depends_on = [kubernetes_manifest.k8srequiredlabels]
 }
@@ -33,21 +17,9 @@ resource "kubernetes_manifest" "required_labels" {
 resource "kubernetes_manifest" "block_privileged_containers" {
   count = var.enable_privileged_container_check ? 1 : 0
 
-  manifest = {
-    apiVersion = "constraints.gatekeeper.sh/v1beta1"
-    kind       = "K8sPSPPrivilegedContainer"
-    metadata = {
-      name = "block-privileged-containers"
-    }
-    spec = {
-      match = {
-        kinds = [
-          { apiGroups = [""], kinds = ["Pod"] },
-        ]
-        excludedNamespaces = var.excluded_namespaces
-      }
-    }
-  }
+  manifest = yamldecode(templatefile("${path.module}/manifests/constraint-block-privileged-containers.yaml", {
+    excluded_namespaces = var.excluded_namespaces
+  }))
 
   depends_on = [kubernetes_manifest.k8spspprivilegedcontainer]
 }
@@ -56,24 +28,10 @@ resource "kubernetes_manifest" "block_privileged_containers" {
 resource "kubernetes_manifest" "allowed_repos" {
   count = var.enable_allowed_repos && length(var.allowed_repos) > 0 ? 1 : 0
 
-  manifest = {
-    apiVersion = "constraints.gatekeeper.sh/v1beta1"
-    kind       = "K8sAllowedRepos"
-    metadata = {
-      name = "allowed-repos"
-    }
-    spec = {
-      match = {
-        kinds = [
-          { apiGroups = [""], kinds = ["Pod"] },
-        ]
-        excludedNamespaces = var.excluded_namespaces
-      }
-      parameters = {
-        repos = var.allowed_repos
-      }
-    }
-  }
+  manifest = yamldecode(templatefile("${path.module}/manifests/constraint-allowed-repos.yaml", {
+    excluded_namespaces = var.excluded_namespaces
+    allowed_repos       = var.allowed_repos
+  }))
 
   depends_on = [kubernetes_manifest.k8sallowedrepos]
 }
@@ -82,21 +40,9 @@ resource "kubernetes_manifest" "allowed_repos" {
 resource "kubernetes_manifest" "container_limits" {
   count = var.enable_container_limits ? 1 : 0
 
-  manifest = {
-    apiVersion = "constraints.gatekeeper.sh/v1beta1"
-    kind       = "K8sContainerLimits"
-    metadata = {
-      name = "container-must-have-limits"
-    }
-    spec = {
-      match = {
-        kinds = [
-          { apiGroups = [""], kinds = ["Pod"] },
-        ]
-        excludedNamespaces = var.excluded_namespaces
-      }
-    }
-  }
+  manifest = yamldecode(templatefile("${path.module}/manifests/constraint-container-limits.yaml", {
+    excluded_namespaces = var.excluded_namespaces
+  }))
 
   depends_on = [kubernetes_manifest.k8scontainerlimits]
 }
@@ -105,21 +51,9 @@ resource "kubernetes_manifest" "container_limits" {
 resource "kubernetes_manifest" "block_host_namespace" {
   count = var.enable_host_namespace_check ? 1 : 0
 
-  manifest = {
-    apiVersion = "constraints.gatekeeper.sh/v1beta1"
-    kind       = "K8sPSPHostNamespace"
-    metadata = {
-      name = "block-host-namespace"
-    }
-    spec = {
-      match = {
-        kinds = [
-          { apiGroups = [""], kinds = ["Pod"] },
-        ]
-        excludedNamespaces = var.excluded_namespaces
-      }
-    }
-  }
+  manifest = yamldecode(templatefile("${path.module}/manifests/constraint-block-host-namespace.yaml", {
+    excluded_namespaces = var.excluded_namespaces
+  }))
 
   depends_on = [kubernetes_manifest.k8spsphostnamespace]
 }

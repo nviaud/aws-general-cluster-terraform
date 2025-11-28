@@ -1,0 +1,23 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: required-labels
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    excludedNamespaces:
+%{~ for ns in excluded_namespaces ~}
+      - ${ns}
+%{~ endfor ~}
+  parameters:
+    labels:
+%{~ for label in required_labels ~}
+      - key: ${label.key}
+        allowedRegex: ${label.allowedRegex}
+%{~ endfor ~}

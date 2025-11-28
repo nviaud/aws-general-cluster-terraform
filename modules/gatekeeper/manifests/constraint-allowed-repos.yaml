@@ -1,0 +1,18 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata:
+  name: allowed-repos
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces:
+%{~ for ns in excluded_namespaces ~}
+      - ${ns}
+%{~ endfor ~}
+  parameters:
+    repos:
+%{~ for repo in allowed_repos ~}
+      - ${repo}
+%{~ endfor ~}

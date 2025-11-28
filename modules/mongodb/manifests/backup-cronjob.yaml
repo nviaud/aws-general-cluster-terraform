@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodb-backup
+  namespace: ${namespace}
+spec:
+  schedule: ${backup_schedule}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: ${service_account_name}
+          restartPolicy: OnFailure
+          containers:
+            - name: mongodb-backup
+              image: mongo:${mongodb_version}
+              command: ["/bin/bash", "/scripts/backup.sh"]
+              env:
+                - name: AWS_REGION
+                  value: ${aws_region}
+              volumeMounts:
+                - name: backup-script
+                  mountPath: /scripts
+                - name: mongodb-secret
+                  mountPath: /mongodb-secret
+                  readOnly: true
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 1Gi
+                requests:
+                  cpu: 250m
+                  memory: 512Mi
+          volumes:
+            - name: backup-script
+              configMap:
+                name: ${configmap_name}
+                defaultMode: 0755
+            - name: mongodb-secret
+              secret:
+                secretName: ${secret_name}

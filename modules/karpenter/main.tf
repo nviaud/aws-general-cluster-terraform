@@ -462,62 +462,7 @@ resource "helm_release" "karpenter" {
 
 # Default NodePool for Karpenter
 resource "kubernetes_manifest" "karpenter_node_pool" {
-  manifest = {
-    apiVersion = "karpenter.sh/v1beta1"
-    kind       = "NodePool"
-    metadata = {
-      name = "default"
-    }
-    spec = {
-      template = {
-        metadata = {
-          labels = {
-            "karpenter.sh/capacity-type" = "on-demand"
-          }
-        }
-        spec = {
-          requirements = [
-            {
-              key      = "kubernetes.io/arch"
-              operator = "In"
-              values   = ["amd64"]
-            },
-            {
-              key      = "kubernetes.io/os"
-              operator = "In"
-              values   = ["linux"]
-            },
-            {
-              key      = "karpenter.sh/capacity-type"
-              operator = "In"
-              values   = ["on-demand", "spot"]
-            },
-            {
-              key      = "karpenter.k8s.aws/instance-category"
-              operator = "In"
-              values   = ["c", "m", "r"]
-            },
-            {
-              key      = "karpenter.k8s.aws/instance-generation"
-              operator = "Gt"
-              values   = ["2"]
-            }
-          ]
-          nodeClassRef = {
-            name = "default"
-          }
-        }
-      }
-      limits = {
-        cpu    = 1000
-        memory = "1000Gi"
-      }
-      disruption = {
-        consolidationPolicy = "WhenUnderutilized"
-        expireAfter         = "720h"
-      }
-    }
-  }
+  manifest = yamldecode(file("${path.module}/manifests/nodepool-default.yaml"))
 
   depends_on = [
     helm_release.karpenter
@@ -526,50 +471,11 @@ resource "kubernetes_manifest" "karpenter_node_pool" {
 
 # Default EC2NodeClass for Karpenter
 resource "kubernetes_manifest" "karpenter_node_class" {
-  manifest = {
-    apiVersion = "karpenter.k8s.aws/v1beta1"
-    kind       = "EC2NodeClass"
-    metadata = {
-      name = "default"
-    }
-    spec = {
-      amiFamily = "AL2"
-      role      = aws_iam_role.karpenter_node.name
-      subnetSelectorTerms = [
-        {
-          tags = {
-            "karpenter.sh/discovery" = var.cluster_name
-          }
-        }
-      ]
-      securityGroupSelectorTerms = [
-        {
-          id = var.node_security_group_id
-        }
-      ]
-      blockDeviceMappings = [
-        {
-          deviceName = "/dev/xvda"
-          ebs = {
-            volumeSize          = "100Gi"
-            volumeType          = "gp3"
-            iops                = 3000
-            throughput          = 125
-            encrypted           = true
-            deleteOnTermination = true
-          }
-        }
-      ]
-      userData = <<-EOT
-        #!/bin/bash
-        /etc/eks/bootstrap.sh ${var.cluster_name}
-      EOT
-      tags = {
-        "karpenter.sh/discovery"                        = var.cluster_name
-        "kubernetes.io/cluster/${var.cluster_name}" = "owned"
-      }
-    }
-  }
+  manifest = yamldecode(templatefile("${path.module}/manifests/ec2nodeclass-default.yaml", {
+    cluster_name            = var.cluster_name
+    node_role               = aws_iam_role.karpenter_node.name
+    node_security_group_id  = var.node_security_group_id
+  }))
 
   depends_on = [
     helm_release.karpenter

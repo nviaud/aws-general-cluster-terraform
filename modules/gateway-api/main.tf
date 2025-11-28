@@ -60,22 +60,10 @@ resource "helm_release" "envoy_gateway" {
 
 # Create a default GatewayClass
 resource "kubernetes_manifest" "gateway_class" {
-  manifest = {
-    apiVersion = "gateway.networking.k8s.io/v1"
-    kind       = "GatewayClass"
-    metadata = {
-      name = var.gateway_class_name
-    }
-    spec = {
-      controllerName = "gateway.envoyproxy.io/gatewayclass-controller"
-      parametersRef = {
-        group     = "gateway.envoyproxy.io"
-        kind      = "EnvoyProxy"
-        name      = "custom-proxy-config"
-        namespace = var.namespace
-      }
-    }
-  }
+  manifest = yamldecode(templatefile("${path.module}/manifests/gatewayclass.yaml", {
+    gateway_class_name = var.gateway_class_name
+    namespace          = var.namespace
+  }))
 
   depends_on = [
     helm_release.envoy_gateway
@@ -84,29 +72,9 @@ resource "kubernetes_manifest" "gateway_class" {
 
 # Create EnvoyProxy configuration
 resource "kubernetes_manifest" "envoy_proxy_config" {
-  manifest = {
-    apiVersion = "gateway.envoyproxy.io/v1alpha1"
-    kind       = "EnvoyProxy"
-    metadata = {
-      name      = "custom-proxy-config"
-      namespace = var.namespace
-    }
-    spec = {
-      provider = {
-        type = "Kubernetes"
-        kubernetes = {
-          envoyService = {
-            type = "LoadBalancer"
-            annotations = {
-              "service.beta.kubernetes.io/aws-load-balancer-type"                            = "nlb"
-              "service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled" = "true"
-              "service.beta.kubernetes.io/aws-load-balancer-scheme"                          = "internet-facing"
-            }
-          }
-        }
-      }
-    }
-  }
+  manifest = yamldecode(templatefile("${path.module}/manifests/envoyproxy-config.yaml", {
+    namespace = var.namespace
+  }))
 
   depends_on = [
     helm_release.envoy_gateway
@@ -115,48 +83,10 @@ resource "kubernetes_manifest" "envoy_proxy_config" {
 
 # Create a sample Gateway
 resource "kubernetes_manifest" "default_gateway" {
-  manifest = {
-    apiVersion = "gateway.networking.k8s.io/v1"
-    kind       = "Gateway"
-    metadata = {
-      name      = "default-gateway"
-      namespace = var.namespace
-    }
-    spec = {
-      gatewayClassName = var.gateway_class_name
-      listeners = [
-        {
-          name     = "http"
-          protocol = "HTTP"
-          port     = 80
-          allowedRoutes = {
-            namespaces = {
-              from = "All"
-            }
-          }
-        },
-        {
-          name     = "https"
-          protocol = "HTTPS"
-          port     = 443
-          allowedRoutes = {
-            namespaces = {
-              from = "All"
-            }
-          }
-          tls = {
-            mode = "Terminate"
-            certificateRefs = [
-              {
-                kind = "Secret"
-                name = "default-tls-cert"
-              }
-            ]
-          }
-        }
-      ]
-    }
-  }
+  manifest = yamldecode(templatefile("${path.module}/manifests/default-gateway.yaml", {
+    namespace          = var.namespace
+    gateway_class_name = var.gateway_class_name
+  }))
 
   depends_on = [
     kubernetes_manifest.gateway_class,

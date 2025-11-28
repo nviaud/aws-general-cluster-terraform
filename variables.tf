@@ -122,6 +122,18 @@ variable "enable_mongodb" {
   default     = true
 }
 
+variable "enable_gatekeeper" {
+  description = "Enable Gatekeeper for policy enforcement"
+  type        = bool
+  default     = true
+}
+
+variable "enable_metrics_server" {
+  description = "Enable Metrics Server for resource metrics"
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Common tags to apply to all resources"
   type        = map(string)

@@ -16,6 +16,8 @@ The infrastructure includes:
 - **External DNS**: Automated DNS management with Route53
 - **Gateway API with Envoy Proxy**: Modern ingress solution with Envoy Gateway
 - **MongoDB**: Replica set deployment for data persistence
+- **Gatekeeper**: OPA-based policy enforcement and governance for cluster security
+- **Metrics Server**: Resource metrics for Horizontal Pod Autoscaler and kubectl top
 
 ## Module Structure
 
@@ -35,7 +37,9 @@ The infrastructure includes:
     ├── cert-manager/                # Certificate management
     ├── external-dns/                # DNS management
     ├── gateway-api/                 # Gateway API with Envoy
-    └── mongodb/                     # MongoDB replica set
+    ├── mongodb/                     # MongoDB replica set
+    ├── gatekeeper/                  # OPA Gatekeeper for policy enforcement
+    └── metrics-server/              # Metrics Server for resource metrics
 ```
 
 ## Prerequisites
@@ -137,6 +141,16 @@ kubectl get gateway -n envoy-gateway-system
 
 # Check MongoDB
 kubectl get pods -n mongodb
+
+# Check Gatekeeper
+kubectl get pods -n gatekeeper-system
+kubectl get constrainttemplates
+kubectl get constraints
+
+# Check Metrics Server
+kubectl get pods -n kube-system -l app.kubernetes.io/name=metrics-server
+kubectl top nodes
+kubectl top pods -A
 ```
 
 ## Environment Management
@@ -375,6 +389,8 @@ enable_cert_manager                 = true
 enable_external_dns                 = true
 enable_gateway_api                  = true
 enable_mongodb                      = true
+enable_gatekeeper                   = true
+enable_metrics_server               = true
 ```
 
 ## Accessing MongoDB
@@ -476,6 +492,266 @@ spec:
 
 External DNS will automatically create the DNS record.
 
+## Gatekeeper Policy Enforcement
+
+Gatekeeper provides policy-as-code enforcement using Open Policy Agent (OPA). It validates and enforces policies on Kubernetes resources before they are created.
+
+### Pre-configured Policies
+
+The module includes five security policies enabled by default:
+
+1. **Required Labels** (`K8sRequiredLabels`):
+   - Enforces required labels on resources
+   - Default required labels: `app`, `environment`
+   - Validates label values against regex patterns
+   - Applies to: Namespaces, Pods, Deployments, StatefulSets, DaemonSets
+
+2. **Block Privileged Containers** (`K8sPSPPrivilegedContainer`):
+   - Prevents containers from running in privileged mode
+   - Blocks both containers and initContainers
+   - Applies to: Pods
+
+3. **Allowed Container Registries** (`K8sAllowedRepos`):
+   - Restricts container images to approved registries
+   - Default allowed: `public.ecr.aws/`, `ghcr.io/`, `quay.io/`, `docker.io/library/`
+   - Applies to: Pods (containers and initContainers)
+
+4. **Container Resource Limits** (`K8sContainerLimits`):
+   - Requires CPU and memory limits on all containers
+   - Prevents resource exhaustion
+   - Applies to: Pods
+
+5. **Block Host Namespaces** (`K8sPSPHostNamespace`):
+   - Prevents use of hostNetwork, hostPID, hostIPC
+   - Reduces attack surface
+   - Applies to: Pods
+
+### Excluded Namespaces
+
+The following namespaces are excluded from Gatekeeper policies by default:
+- `kube-system`
+- `kube-public`
+- `kube-node-lease`
+- `gatekeeper-system`
+- `karpenter`
+
+### Viewing Gatekeeper Status
+
+**Check installed constraint templates:**
+
+```bash
+kubectl get constrainttemplates
+```
+
+**Check active constraints:**
+
+```bash
+kubectl get constraints
+```
+
+**View policy violations in audit mode:**
+
+```bash
+kubectl get constraints -o yaml | grep -A 10 violations
+```
+
+**Check Gatekeeper logs:**
+
+```bash
+kubectl logs -n gatekeeper-system -l control-plane=controller-manager -f
+```
+
+### Customizing Policies
+
+Policies can be customized in your environment `.tfvars` files:
+
+**Disable specific policies:**
+
+```hcl
+enable_required_labels            = false
+enable_privileged_container_check = false
+enable_allowed_repos              = false
+enable_container_limits           = false
+enable_host_namespace_check       = false
+```
+
+**Customize allowed registries:**
+
+```hcl
+allowed_repos = [
+  "your-account.dkr.ecr.eu-west-1.amazonaws.com/",
+  "ghcr.io/your-org/",
+]
+```
+
+**Customize required labels:**
+
+```hcl
+required_labels = [
+  {
+    key          = "team"
+    allowedRegex = "^(platform|data|ml)$"
+  },
+  {
+    key          = "cost-center"
+    allowedRegex = ""
+  }
+]
+```
+
+**Add custom namespaces to exclusion list:**
+
+```hcl
+excluded_namespaces = [
+  "kube-system",
+  "gatekeeper-system",
+  "your-critical-namespace",
+]
+```
+
+### Testing Policies
+
+**Test blocking privileged containers:**
+
+```bash
+kubectl run privileged-test --image=nginx --privileged=true
+# Should be rejected by Gatekeeper
+```
+
+**Test required labels:**
+
+```bash
+kubectl run test-pod --image=nginx
+# Should be rejected for missing required labels
+
+kubectl run test-pod --image=nginx --labels="app=test,environment=dev"
+# Should be allowed
+```
+
+**Test container limits:**
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-limits
+  labels:
+    app: test
+    environment: dev
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    # Missing resource limits - should be rejected
+```
+
+### Webhook Configuration
+
+The validating webhook is configured with `webhook_failure_policy = "Ignore"` by default, meaning:
+- If Gatekeeper is unavailable, requests are allowed
+- Set to `"Fail"` in production for stricter enforcement
+
+Configure in your `.tfvars`:
+
+```hcl
+webhook_failure_policy = "Fail"  # Reject all requests if Gatekeeper is down
+```
+
+## Metrics Server
+
+Metrics Server collects resource metrics from Kubelets and exposes them via the Metrics API for use by Horizontal Pod Autoscaler (HPA) and the `kubectl top` command.
+
+### Features
+
+- **Resource Metrics**: Provides CPU and memory metrics for nodes and pods
+- **HPA Support**: Required for Horizontal Pod Autoscaler to function
+- **kubectl top**: Enables `kubectl top nodes` and `kubectl top pods` commands
+- **High Availability**: Runs 2 replicas by default for reliability
+- **System Node Placement**: Configured to run on system nodes with appropriate tolerations
+
+### Using Metrics Server
+
+**Check node resource usage:**
+
+```bash
+kubectl top nodes
+```
+
+**Check pod resource usage:**
+
+```bash
+kubectl top pods -A
+kubectl top pods -n <namespace>
+```
+
+**Create a Horizontal Pod Autoscaler:**
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: myapp-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: myapp
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+```
+
+**Or using kubectl:**
+
+```bash
+kubectl autoscale deployment myapp --cpu-percent=70 --min=2 --max=10
+```
+
+### Verify Metrics Server
+
+**Check if Metrics Server is running:**
+
+```bash
+kubectl get pods -n kube-system -l app.kubernetes.io/name=metrics-server
+```
+
+**Test metrics API:**
+
+```bash
+kubectl get apiservices | grep metrics
+# Should show: v1beta1.metrics.k8s.io
+```
+
+**Check logs:**
+
+```bash
+kubectl logs -n kube-system -l app.kubernetes.io/name=metrics-server -f
+```
+
+### Configuration
+
+Metrics Server is configured with:
+- **Metric resolution**: 15 seconds (default)
+- **Replicas**: 2 for high availability
+- **Priority class**: system-cluster-critical
+- **Resource limits**: 200m CPU, 256Mi memory
+- **Resource requests**: 100m CPU, 128Mi memory
+
+These can be customized by modifying `modules/metrics-server/variables.tf`.
+
 ## Customization
 
 ### Adding Custom Node Groups
@@ -571,6 +847,67 @@ Verify Gateway status:
 kubectl describe gateway -n envoy-gateway-system default-gateway
 ```
 
+### Gatekeeper issues
+
+**Check if Gatekeeper is running:**
+
+```bash
+kubectl get pods -n gatekeeper-system
+kubectl logs -n gatekeeper-system -l control-plane=controller-manager -f
+```
+
+**Check if constraints are enforced:**
+
+```bash
+kubectl get constrainttemplates
+kubectl get constraints
+```
+
+**Debug policy violations:**
+
+```bash
+# Check constraint status for violations
+kubectl get constraints -o yaml
+
+# Test a policy
+kubectl run test --image=nginx --dry-run=server
+```
+
+**Webhook not blocking resources:**
+
+- Verify webhook is configured: `kubectl get validatingwebhookconfigurations`
+- Check if namespace is excluded from policies
+- Verify constraint template and constraint are created
+- Check Gatekeeper audit logs for violations
+
+### Metrics Server issues
+
+**kubectl top not working:**
+
+```bash
+# Check if Metrics Server is running
+kubectl get pods -n kube-system -l app.kubernetes.io/name=metrics-server
+
+# Check Metrics Server logs
+kubectl logs -n kube-system -l app.kubernetes.io/name=metrics-server -f
+
+# Verify metrics API is registered
+kubectl get apiservices | grep metrics
+```
+
+**Common issues:**
+
+- **Metrics not available yet**: Wait 15-30 seconds after pod starts for first metrics collection
+- **TLS errors**: Metrics Server is configured with proper kubelet communication settings
+- **No metrics for nodes**: Check that kubelet is exposing metrics on the node
+
+**Test metrics API directly:**
+
+```bash
+kubectl get --raw /apis/metrics.k8s.io/v1beta1/nodes
+kubectl get --raw /apis/metrics.k8s.io/v1beta1/pods
+```
+
 ## Security Considerations
 
 - All EBS volumes are encrypted
@@ -579,6 +916,9 @@ kubectl describe gateway -n envoy-gateway-system default-gateway
 - Security groups properly configured
 - Private subnets for worker nodes
 - Managed node groups use IMDSv2
+- Gatekeeper enforces security policies (privileged containers, host namespaces, resource limits)
+- Policy-as-code approach for consistent security enforcement
+- Admission control prevents non-compliant resources from being created
 
 ## Production Readiness Checklist
 
@@ -594,6 +934,11 @@ Before going to production:
 - [ ] Set up disaster recovery procedures
 - [ ] Review and adjust cost optimization settings
 - [ ] Configure TLS certificates for Gateway API
+- [ ] Review and customize Gatekeeper policies for your security requirements
+- [ ] Set webhook_failure_policy to "Fail" for stricter enforcement
+- [ ] Test Gatekeeper policies in non-production environments first
+- [ ] Customize allowed container registries to match your organization's registries
+- [ ] Configure required labels to match your tagging strategy
 
 ## Contributing
 

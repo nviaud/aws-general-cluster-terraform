@@ -26,15 +26,73 @@ LocalStack is a cloud service emulator that runs in a single container on your m
 - **Most modules disabled**: The local.tfvars disables most modules by default
 
 **What works in Community Edition:**
-- VPC and networking (EC2, subnets, route tables)
-- S3 buckets
-- IAM roles and policies (basic)
-- DynamoDB
-- Route53 (basic)
+- ✅ VPC and networking (EC2, subnets, route tables, NAT gateways, IGW)
+- ✅ S3 buckets
+- ✅ IAM roles and policies (basic)
+- ✅ DynamoDB
+- ✅ Route53 (basic)
+- ✅ Security Groups
+- ✅ Elastic IPs
+
+**What doesn't work:**
+- ❌ EKS clusters
+- ❌ Kubernetes/Helm resources
+- ❌ EKS add-ons
 
 **For full EKS testing**, you would need:
 - LocalStack Pro (paid)
 - OR use a real AWS dev account with the dev.tfvars configuration
+
+## VPC-Only Testing (Recommended for LocalStack Community)
+
+Since EKS requires LocalStack Pro, the recommended approach is to test VPC infrastructure only:
+
+### Successfully Tested Resources
+
+The following VPC resources work perfectly in LocalStack Community:
+
+```bash
+# Apply will create VPC resources and fail on EKS (expected)
+terraform apply -var-file=environments/local.tfvars -auto-approve
+
+# VPC resources successfully created:
+# ✅ VPC (10.99.0.0/16)
+# ✅ 2 Public Subnets
+# ✅ 2 Private Subnets
+# ✅ Internet Gateway
+# ✅ 2 NAT Gateways
+# ✅ 2 Elastic IPs
+# ✅ Route Tables & Associations
+# ✅ Security Groups (cluster & node)
+# ✅ IAM Roles & Policies
+# ✅ Launch Templates
+
+# ❌ EKS Cluster will fail (requires Pro)
+```
+
+### View Created Resources
+
+```bash
+# Show all VPC resources
+terraform state list | grep module.vpc
+
+# Show VPC outputs
+terraform output
+
+# Show specific resource details
+terraform state show module.vpc.aws_vpc.main
+```
+
+### Example Output
+
+```
+VPC Resources Created:
+  - VPC: vpc-d66bc0bf4f9210041 (10.99.0.0/16)
+  - Private Subnets: subnet-0266d8f2324555e39, subnet-180cac4a223e75e1b
+  - Public Subnets: subnet-dc72295cce2c9ebf6, subnet-89588a26c4154ea4e
+  - NAT Gateways: nat-cb47d21a8fcfd1b35, nat-b78930a8e4298cb14
+  - Internet Gateway: igw-cc2a0efbc329a2c6b
+```
 
 ## Quick Start
 
@@ -266,6 +324,18 @@ LocalStack Community Edition has service limitations. For production-like testin
 
 ## Cleaning Up
 
+### Remove VPC Resources Only
+```bash
+# Destroy only the successfully created VPC resources
+terraform destroy -target=module.vpc -var-file=environments/local.tfvars -auto-approve
+```
+
+### Clean Failed EKS Resources from State
+```bash
+# If you have failed EKS resources in state, remove them
+terraform state rm module.eks.aws_eks_cluster.main
+```
+
 ### Soft Cleanup (Keep LocalStack Data)
 ```bash
 terraform destroy -var-file=environments/local.tfvars
@@ -281,6 +351,14 @@ This removes:
 - Persistent data (`.localstack/`)
 - Provider overrides
 - Terraform state files
+
+### Fresh Start
+```bash
+# Complete cleanup and restart
+make local-clean
+make local-setup
+terraform apply -var-file=environments/local.tfvars -auto-approve
+```
 
 ## Cost Savings
 

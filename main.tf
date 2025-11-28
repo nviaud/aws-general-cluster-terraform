@@ -120,3 +120,25 @@ module "mongodb" {
 
   depends_on = [module.eks]
 }
+
+# Gatekeeper Module - Policy enforcement and governance
+module "gatekeeper" {
+  count  = var.enable_gatekeeper ? 1 : 0
+  source = "./modules/gatekeeper"
+
+  cluster_name = module.eks.cluster_name
+  tags         = local.common_tags
+
+  depends_on = [module.eks]
+}
+
+# Metrics Server Module - Container resource metrics for HPA and kubectl top
+module "metrics_server" {
+  count  = var.enable_metrics_server ? 1 : 0
+  source = "./modules/metrics-server"
+
+  cluster_name = module.eks.cluster_name
+  tags         = local.common_tags
+
+  depends_on = [module.eks]
+}

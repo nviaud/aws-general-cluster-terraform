@@ -37,6 +37,8 @@ enable_cert_manager                 = false  # Requires Kubernetes
 enable_external_dns                 = false  # Requires Route53 (can enable with LocalStack Pro)
 enable_gateway_api                  = false  # Requires Kubernetes
 enable_mongodb                      = false  # Requires EKS
+enable_gatekeeper                   = false  # Requires Kubernetes
+enable_metrics_server               = false  # Requires Kubernetes
 
 # Tags
 tags = {
